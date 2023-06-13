@@ -5,12 +5,12 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.http.POST
 import ru.netology.coroutines.dto.Author
 import ru.netology.coroutines.dto.Comment
 import ru.netology.coroutines.dto.Post
-import ru.netology.coroutines.dto.PostWithComments
+import ru.netology.coroutines.dto.PostWithCommentsAndAuthors
 import java.io.IOException
+import java.util.HashMap
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.resume
@@ -137,27 +137,31 @@ fun main() {
     with(CoroutineScope(EmptyCoroutineContext)) {
         launch {
             try {
-                var authorsId = listOf<Long>()
+                var authorsMap = HashMap<Long, Author>() // Пусть все посты ссылаются на одну и ту же коллекцию авторов
                 val posts = getPosts(client)
                     .map { post ->
+                        //var authorsMap = HashMap<Long, Author>() // не будем делать индивидуальные наборы авторов
                         async {
-/*
+                            if (!authorsMap.containsKey(post.authorId))
+                                authorsMap.putIfAbsent(post.authorId, getAuthor(client, post.authorId))
+                        }
+                        async {
+                            // Пока дождемся комментариев, уже в другом блоке прогрузятся авторы
+                            val postComments = getComments(client, post.id)
                             postComments.forEach {
-                                authorsId += it.authorId
+                                if (!authorsMap.containsKey(it.authorId))
+                                    authorsMap.putIfAbsent(it.authorId, getAuthor(client, it.authorId))
                             }
-*/
-                            PostWithComments(post, getComments(client, post.id))
+                            //println("authors:$authorsMap")
+                            //PostWithComments(post, getComments(client, post.id))
+                            PostWithCommentsAndAuthors(post, authorsMap, postComments)
                         }
                     }.awaitAll()
-                posts.forEach{
-                    authorsId += it.post.authorId
-                    println("authorId=${it.post.authorId}, post.id=${it.post.id}")
-                }
-                println("authorsId:$authorsId")
+
                 println(posts)
             } catch (e: Exception) {
                 e.printStackTrace()
-             }
+            }
         }
     }
     Thread.sleep(30_000L)
@@ -201,4 +205,4 @@ suspend fun getComments(client: OkHttpClient, id: Long): List<Comment> =
     makeRequest("$BASE_URL/api/slow/posts/$id/comments", client, object : TypeToken<List<Comment>>() {})
 
 suspend fun getAuthor(client: OkHttpClient, authorId: Long): Author =
-    makeRequest("$BASE_URL/api/slow/authors/$authorId", client, object: TypeToken<Author>() {})
+    makeRequest("$BASE_URL/api/authors/$authorId", client, object : TypeToken<Author>() {}) // slow не надо
