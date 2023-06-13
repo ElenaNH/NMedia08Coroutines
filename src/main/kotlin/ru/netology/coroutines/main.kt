@@ -138,19 +138,26 @@ fun main() {
         launch {
             try {
                 var authorsMap = HashMap<Long, Author>() // Пусть все посты ссылаются на одну и ту же коллекцию авторов
+                var authorsUnrequested = HashSet<Long>() // Вовсе незачем запрашивать одно и то же несколько раз
                 val posts = getPosts(client)
                     .map { post ->
                         //var authorsMap = HashMap<Long, Author>() // не будем делать индивидуальные наборы авторов
                         async {
-                            if (!authorsMap.containsKey(post.authorId))
-                                authorsMap.putIfAbsent(post.authorId, getAuthor(client, post.authorId))
+                            if (!authorsUnrequested.contains(post.authorId)) {
+                                authorsUnrequested.add(post.authorId)
+                                if (!authorsMap.containsKey(post.authorId))
+                                    authorsMap.putIfAbsent(post.authorId, getAuthor(client, post.authorId))
+                            }
                         }
                         async {
                             // Пока дождемся комментариев, уже в другом блоке прогрузятся авторы
                             val postComments = getComments(client, post.id)
                             postComments.forEach {
-                                if (!authorsMap.containsKey(it.authorId))
-                                    authorsMap.putIfAbsent(it.authorId, getAuthor(client, it.authorId))
+                                if (!authorsUnrequested.contains(it.authorId)) {
+                                    authorsUnrequested.add(it.authorId)
+                                    if (!authorsMap.containsKey(it.authorId))
+                                        authorsMap.putIfAbsent(it.authorId, getAuthor(client, it.authorId))
+                                }
                             }
                             //println("authors:$authorsMap")
                             //PostWithComments(post, getComments(client, post.id))
